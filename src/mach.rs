@@ -23,7 +23,7 @@ impl HostPort {
     pub fn vm_statistics(&self) -> io::Result<vm_statistics64> {
         const REQUIRED_BYTES: usize =
             mem::offset_of!(vm_statistics64, internal_page_count) + size_of::<u32>();
-        
+
         let mut stats = MaybeUninit::<vm_statistics64>::zeroed();
         let mut count = libc::HOST_VM_INFO64_COUNT;
 
