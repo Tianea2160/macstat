@@ -88,7 +88,7 @@ fn sysctl<T: Copy>(name: &CStr) -> io::Result<T> {
     let mut value = MaybeUninit::<T>::uninit();
     let mut size = size_of::<T>();
 
-    // SAFETY: name은 NUL로 끝나는 C 문자열이고, value는 size 바이트만큼 쓸 수 있는 공간이다.
+    // SAFETY: name is a NUL-terminated C string, and value has room for size bytes.
     let ret = unsafe {
         libc::sysctlbyname(
             name.as_ptr(),
@@ -108,6 +108,6 @@ fn sysctl<T: Copy>(name: &CStr) -> io::Result<T> {
         )));
     }
 
-    // SAFETY: 커널이 T 크기만큼 정확히 채웠고, 이 모듈에서 쓰는 T는 모든 비트 패턴이 유효한 정수 또는 정수로만 된 구조체다.
+    // SAFETY: The kernel filled exactly size_of::<T>() bytes, and every T used in this module is an integer or an all-integer struct for which any bit pattern is valid.
     Ok(unsafe { value.assume_init() })
 }

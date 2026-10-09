@@ -14,14 +14,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// 메모리 사용량 조회
+    /// Show memory usage
     Mem,
-    /// CPU 사용률 조회
+    /// Show CPU usage
     Cpu {
-        /// 코어별 사용률 표시
+        /// Show usage per core
         #[arg(short, long)]
         per_core: bool,
-        /// 측정 간격(ms)
+        /// Sampling interval in milliseconds
         #[arg(short, long, default_value_t = 500)]
         interval: u64,
     },
