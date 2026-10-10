@@ -1,7 +1,8 @@
 use std::fmt;
 
-use crate::cpu::{CpuUsage, Usage};
-use crate::memory::MemoryInfo;
+use macstat::cpu::{CpuUsage, Usage};
+use macstat::memory::MemoryInfo;
+
 use crate::style::Stylize;
 
 pub struct MemoryReport<'a>(pub &'a MemoryInfo);

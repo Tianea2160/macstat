@@ -1,6 +1,3 @@
-mod cpu;
-mod mach;
-mod memory;
 mod report;
 mod style;
 
@@ -8,6 +5,7 @@ use std::io;
 use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
+use macstat::{cpu, memory};
 
 use crate::report::{CpuReport, MemoryReport};
 

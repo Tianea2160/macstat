@@ -25,3 +25,4 @@ jobs:
       - run: cargo build --locked
       - run: cargo test --locked
       - run: cargo run --locked -- mem
+      - run: swift build --package-path macos

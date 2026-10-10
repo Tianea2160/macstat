@@ -1,0 +1,6 @@
+module CMacstat [system] {
+    header "../../../ffi/include/macstat.h"
+    link "macstat_ffi"
+    link "iconv"
+    export *
+}

@@ -1,11 +1,18 @@
 # macstat
 
-A Rust CLI that reads macOS memory and CPU usage by calling kernel APIs (sysctl, Mach) directly through FFI. This is a learning project: the user is learning Rust by building it.
+A Rust CLI that reads macOS memory and CPU usage by calling kernel APIs (sysctl, Mach) directly through FFI, plus a SwiftUI menu bar app that shows the same data through a C ABI exported from Rust. This is a learning project: the user is learning Rust by building it.
+
+## Layout
+
+- `src/lib.rs`: the `macstat` library (`cpu`, `memory`, private `mach`). It only collects data
+- `src/main.rs`, `src/report.rs`, `src/style.rs`: the CLI binary. It formats the library data for the terminal
+- `ffi/`: the `macstat-ffi` crate (`staticlib`). It exports the library as C functions; `ffi/include/macstat.h` is the matching C header
+- `macos/`: a SwiftPM package for the menu bar app (`MenuBarExtra`). `CMacstat` wraps the header with a module map and links `libmacstat_ffi.a` from `target/debug`
 
 ## Working style
 
 - IMPORTANT: The user's understanding matters more than the output. Before changing code, explain what you will do and why, then proceed in small steps of about one function each
-- Before adding a dependency (crate), explain what it does and why it is needed, and get agreement. Current dependencies are only `clap`, `libc`, and `mach2`
+- Before adding a dependency (crate), explain what it does and why it is needed, and get agreement. Current dependencies are only `clap`, `libc`, and `mach2`. The Swift app uses only system frameworks; ask before adding a Swift package too
 - Do not use crates that hide OS calls, such as `sysinfo`. Working with FFI directly is the learning goal
 - When a Rust concept (ownership, traits, `unsafe`, `Drop`, etc.) appears for the first time, explain it briefly. Comparisons with Java help
 - Explain to the user in Korean, keeping code identifiers and technical terms in their original form
@@ -14,8 +21,10 @@ A Rust CLI that reads macOS memory and CPU usage by calling kernel APIs (sysctl,
 ## Commands
 
 - Run: `cargo run -- mem`, `cargo run -- cpu -p -i 1000` (arguments after `--` go to the program)
-- All three must pass before finishing a task: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`
-- CI (`.github/workflows/ci.yml`, `macos-26` runner) runs the same checks with `--locked`, plus `cargo run -- mem`. If you change the check commands, update CI too. CI must stay on a macOS runner because the crate links and runs only on macOS
+- Run the menu bar app: `cargo build && swift run --package-path macos` (stop it with its Quit button or Ctrl+C). Run `cargo build` first whenever Rust code changes, because SwiftPM does not track the static library
+- `Cargo.toml` sets `default-members = [".", "ffi"]`, so plain `cargo build`/`test`/`clippy` in the root cover both packages. Keep new workspace members in `default-members` too
+- All three must pass before finishing a task: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`. If `macos/` or the header changed, `swift build --package-path macos` must pass too
+- CI (`.github/workflows/ci.yml`, `macos-26` runner) runs the same checks with `--locked`, plus `cargo run -- mem` and `swift build --package-path macos`. If you change the check commands, update CI too. CI must stay on a macOS runner because the crate links and runs only on macOS
 - The Rust version is pinned in `rust-toolchain.toml`, which both local builds and CI follow. To upgrade Rust, change only this file
 - Verify output against built-in macOS tools: `vm_stat`, `sysctl hw.memsize vm.swapusage`, `top -l 1 -n 0 | grep PhysMem`
 
@@ -40,6 +49,13 @@ A Rust CLI that reads macOS memory and CPU usage by calling kernel APIs (sysctl,
 - `kern.memorystatus_vm_pressure_level` values are 1=Normal, 2=Warning, 4=Critical (`DISPATCH_MEMORYPRESSURE_*` in `dispatch/source.h`)
 - Compute memory usage the same way as Activity Monitor: Used = App (internal − purgeable) + Wired + Compressed, Cached = external + purgeable
 
+## Exporting to Swift (`ffi` crate)
+
+- Export functions with `#[unsafe(no_mangle)] pub extern "C" fn macstat_*`, with a `// SAFETY:` comment above the attribute
+- Exchange `#[repr(C)]` structs by value and report failure with an `ok: bool` field. Avoid raw pointers and heap memory across the boundary unless a matching `macstat_*_free` function is added
+- `ffi/include/macstat.h` is written by hand and must match the Rust structs exactly. When a struct changes, update the header and the `offset_of!`/`size_of` layout tests in `ffi/src/lib.rs` together
+- The Swift app must call the blocking `macstat_cpu_measure` off the main actor (for example with `Task.detached`)
+
 ## Code style
 
 - The only comments are `// SAFETY:`. Keep the `///` doc comments on clap fields because they become the `--help` text
@@ -49,6 +65,7 @@ A Rust CLI that reads macOS memory and CPU usage by calling kernel APIs (sysctl,
 ## Environment
 
 - macOS only. The development machine is an Apple M4 (arm64) with 16 KiB pages
+- Swift 6 from the Command Line Tools is enough for `swift build`/`swift run`; Xcode is not required. The app targets macOS 14+ and builds in the Swift 6 language mode (strict concurrency)
 - If RustRover shows errors such as `Unresolved import` while `cargo check` passes, the IDE index is stale. Fix it with Reload in the Cargo tool window or File → Reload All from Disk
 
 ## Git
