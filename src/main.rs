@@ -71,6 +71,7 @@ Swap            {swap_used:>10}   of {swap_total} ({swap_free} free)"
 
 fn print_cpu(per_core: bool, interval: u64) -> io::Result<()> {
     let usage = cpu::measure(Duration::from_millis(interval))?;
+    let cpus = usage.cores.len();
 
     let mut rows = vec![format_usage("Total", &usage.total)];
     if per_core {
@@ -86,7 +87,8 @@ fn print_cpu(per_core: bool, interval: u64) -> io::Result<()> {
 
     println!(
         "\
-CPU       System     User     Idle
+CPUs      {cpus}
+          System     User     Idle
 {rows}"
     );
     Ok(())
