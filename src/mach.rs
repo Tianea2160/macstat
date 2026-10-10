@@ -1,8 +1,13 @@
 use std::ffi::CStr;
 use std::io;
 use std::mem::{self, MaybeUninit};
+use std::{ptr, slice};
 
-use libc::{KERN_SUCCESS, integer_t, kern_return_t, mach_port_t, vm_statistics64};
+use libc::{
+    CPU_STATE_MAX, KERN_SUCCESS, PROCESSOR_CPU_LOAD_INFO, integer_t, kern_return_t,
+    mach_msg_type_number_t, mach_port_t, natural_t, processor_cpu_load_info,
+    processor_info_array_t, vm_address_t, vm_statistics64,
+};
 use mach2::mach_init::mach_host_self;
 use mach2::mach_port::mach_port_deallocate;
 use mach2::traps::mach_task_self;
@@ -49,6 +54,68 @@ impl HostPort {
 
         // SAFETY: zeroed() initialized every byte and the kernel overwrote the leading part. All fields are integers, so any bit pattern is valid.
         Ok(unsafe { stats.assume_init() })
+    }
+
+    pub fn processor_load(&self) -> io::Result<ProcessorLoad> {
+        let mut cpu_count: natural_t = 0;
+        let mut info: processor_info_array_t = ptr::null_mut();
+        let mut info_count: mach_msg_type_number_t = 0;
+
+        // SAFETY: All three out-pointers point to live locals of exactly the types the kernel writes.
+        let ret = unsafe {
+            libc::host_processor_info(
+                self.0,
+                PROCESSOR_CPU_LOAD_INFO,
+                &mut cpu_count,
+                &mut info,
+                &mut info_count,
+            )
+        };
+        if ret != KERN_SUCCESS {
+            return Err(kern_error("host_processor_info", ret));
+        }
+        if info.is_null() {
+            return Err(io::Error::other(
+                "host_processor_info returned a null array",
+            ));
+        }
+
+        let load = ProcessorLoad {
+            info,
+            info_count,
+            cpu_count: cpu_count as usize,
+        };
+        let expected = load.cpu_count * CPU_STATE_MAX as usize;
+        if load.info_count as usize != expected {
+            return Err(io::Error::other(format!(
+                "host_processor_info: got {} values for {} CPUs, expected {expected}",
+                load.info_count, load.cpu_count
+            )));
+        }
+        Ok(load)
+    }
+}
+
+pub struct ProcessorLoad {
+    info: processor_info_array_t,
+    info_count: mach_msg_type_number_t,
+    cpu_count: usize,
+}
+
+impl ProcessorLoad {
+    pub fn cpus(&self) -> &[processor_cpu_load_info] {
+        // SAFETY: info is non-null and holds cpu_count * CPU_STATE_MAX integer_t values (checked in processor_load). processor_cpu_load_info is a repr(C) array of CPU_STATE_MAX c_uint with the same size and alignment, and any bit pattern is valid.
+        unsafe { slice::from_raw_parts(self.info.cast(), self.cpu_count) }
+    }
+}
+
+impl Drop for ProcessorLoad {
+    fn drop(&mut self) {
+        let size = self.info_count as usize * size_of::<integer_t>();
+        // SAFETY: info was allocated in this task by host_processor_info with info_count integer_t values, and ProcessorLoad is never duplicated, so it is freed exactly once.
+        unsafe {
+            libc::vm_deallocate(mach_task_self(), self.info as vm_address_t, size);
+        }
     }
 }
 

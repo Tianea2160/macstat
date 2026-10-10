@@ -1,7 +1,9 @@
+mod cpu;
 mod mach;
 mod memory;
 
 use std::io;
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
@@ -22,7 +24,7 @@ enum Command {
         #[arg(short, long)]
         per_core: bool,
         /// Sampling interval in milliseconds
-        #[arg(short, long, default_value_t = 500)]
+        #[arg(short, long, default_value_t = 500, value_parser = clap::value_parser!(u64).range(1..))]
         interval: u64,
     },
 }
@@ -32,9 +34,7 @@ fn main() -> io::Result<()> {
 
     match cli.command {
         Command::Mem => print_memory()?,
-        Command::Cpu { per_core, interval } => {
-            println!("cpu: per_core={per_core}, interval={interval}ms");
-        }
+        Command::Cpu { per_core, interval } => print_cpu(per_core, interval)?,
     }
     Ok(())
 }
@@ -67,6 +67,36 @@ Memory          {total:>10}   Pressure: {pressure}
 Swap            {swap_used:>10}   of {swap_total} ({swap_free} free)"
     );
     Ok(())
+}
+
+fn print_cpu(per_core: bool, interval: u64) -> io::Result<()> {
+    let usage = cpu::measure(Duration::from_millis(interval))?;
+
+    let mut rows = vec![format_usage("Total", &usage.total)];
+    if per_core {
+        rows.extend(
+            usage
+                .cores
+                .iter()
+                .enumerate()
+                .map(|(i, core)| format_usage(&format!("  cpu{i}"), core)),
+        );
+    }
+    let rows = rows.join("\n");
+
+    println!(
+        "\
+CPU       System     User     Idle
+{rows}"
+    );
+    Ok(())
+}
+
+fn format_usage(label: &str, usage: &cpu::Usage) -> String {
+    format!(
+        "{label:<8} {:>6.1}%  {:>6.1}%  {:>6.1}%",
+        usage.system, usage.user, usage.idle
+    )
 }
 
 fn format_bytes(bytes: u64) -> String {
